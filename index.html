@@ -3,38 +3,245 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Analiza utakmica</title>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
 <style>
-body{font-family:Arial,sans-serif;background:#f2f2f2;margin:0;padding:20px}
-.container{max-width:700px;margin:auto;background:white;padding:20px;border-radius:12px}
-h1{text-align:center}
-input,button{width:100%;padding:14px;margin-top:10px;box-sizing:border-box}
-button{background:#222;color:white;border:0;border-radius:8px}
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 15px;
+    font-family: Arial, sans-serif;
+    background: #f1f3f5;
+}
+
+.container {
+    max-width: 700px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 14px;
+}
+
+h1 {
+    text-align: center;
+    margin-top: 0;
+}
+
+input[type="file"] {
+    width: 100%;
+    margin: 15px 0;
+}
+
+button {
+    width: 100%;
+    padding: 14px;
+    margin: 7px 0;
+    border: 0;
+    border-radius: 8px;
+    background: #222;
+    color: white;
+    font-size: 16px;
+}
+
+button:disabled {
+    background: #999;
+}
+
+#status {
+    margin: 15px 0;
+    padding: 12px;
+    background: #eee;
+    border-radius: 8px;
+}
+
+.match {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 15px;
+}
+
+.match h3 {
+    margin-top: 0;
+}
+
+.odds {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.odd {
+    background: #f1f1f1;
+    padding: 10px;
+    border-radius: 7px;
+    text-align: center;
+    width: 31%;
+}
+
+.analysis {
+    margin-top: 12px;
+    padding: 10px;
+    background: #eef5ff;
+    border-radius: 7px;
+}
 </style>
 </head>
+
 <body>
+
 <div class="container">
+
 <h1>Analiza nogometnih utakmica</h1>
 
-<input type="file" id="slike" accept="image/*" multiple>
+<p>
+Odaberi jednu ili više fotografija ponude.
+</p>
 
-<button onclick="analiziraj()">Analiziraj utakmice</button>
+<input
+    type="file"
+    id="images"
+    accept="image/*"
+    multiple
+>
 
-<div id="rezultat"></div>
+<button id="analyzeButton" onclick="analyzeImages()">
+    Analiziraj slike
+</button>
+
+<div id="status">
+    Spremno.
+</div>
+
+<div id="results"></div>
+
 </div>
 
 <script>
-function analiziraj(){
-    const slike=document.getElementById("slike").files;
-    const rezultat=document.getElementById("rezultat");
 
-    if(slike.length===0){
-        rezultat.innerHTML="<p>Odaberi jednu ili više slika.</p>";
+async function analyzeImages() {
+
+    const files = document.getElementById("images").files;
+    const status = document.getElementById("status");
+    const results = document.getElementById("results");
+    const button = document.getElementById("analyzeButton");
+
+    if (files.length === 0) {
+        status.innerHTML = "Prvo odaberi jednu ili više slika.";
         return;
     }
 
-    rezultat.innerHTML="<p>Slike su učitane.</p>";
+    button.disabled = true;
+    results.innerHTML = "";
+
+    let completeText = "";
+
+    for (let i = 0; i < files.length; i++) {
+
+        status.innerHTML =
+            "Čitam sliku " + (i + 1) + " od " + files.length + "...";
+
+        try {
+
+            const result = await Tesseract.recognize(
+                files[i],
+                "eng",
+                {
+                    logger: info => {
+
+                        if (info.status === "recognizing text") {
+
+                            const progress =
+                                Math.round(info.progress * 100);
+
+                            status.innerHTML =
+                                "Čitanje slike " +
+                                (i + 1) +
+                                ": " +
+                                progress +
+                                "%";
+                        }
+                    }
+                }
+            );
+
+            completeText += "\n" + result.data.text;
+
+        } catch (error) {
+
+            completeText +=
+                "\nGreška pri čitanju slike " +
+                (i + 1) +
+                ".";
+        }
+    }
+
+    status.innerHTML = "Čitanje završeno.";
+
+    prikaziTekst(completeText);
+
+    button.disabled = false;
 }
+
+
+function prikaziTekst(text) {
+
+    const results =
+        document.getElementById("results");
+
+    const lines =
+        text
+        .split("\n")
+        .map(x => x.trim())
+        .filter(x => x.length > 0);
+
+    if (lines.length === 0) {
+
+        results.innerHTML =
+            "<p>Nije pronađen tekst na slikama.</p>";
+
+        return;
+    }
+
+    results.innerHTML = "";
+
+    const naslov =
+        document.createElement("h2");
+
+    naslov.innerText =
+        "Prepoznati podaci";
+
+    results.appendChild(naslov);
+
+    const textBox =
+        document.createElement("div");
+
+    textBox.className = "match";
+
+    textBox.innerText =
+        lines.join("\n");
+
+    results.appendChild(textBox);
+
+    const info =
+        document.createElement("div");
+
+    info.className = "analysis";
+
+    info.innerHTML =
+        "<strong>Sljedeći korak:</strong><br>" +
+        "Ovaj tekst ćemo zatim pretvoriti u utakmice " +
+        "s domaćinom, gostom, ligom i koeficijentima 1-X-2.";
+
+    results.appendChild(info);
+}
+
 </script>
 
 </body>
