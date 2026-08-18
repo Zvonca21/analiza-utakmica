@@ -115,13 +115,6 @@ button:disabled {
     background: #fff3cd;
     border-radius: 9px;
 }
-
-#debug {
-    margin-top: 15px;
-    font-size: 12px;
-    white-space: pre-wrap;
-    display: none;
-}
 </style>
 </head>
 
@@ -155,8 +148,6 @@ Spremno za analizu.
 
 <div id="rezultati"></div>
 
-<pre id="debug"></pre>
-
 </div>
 
 <script>
@@ -180,9 +171,9 @@ const REDOSLIJED = {
 };
 
 
-/* ================================
+/* ---------------------------
    POMOĆNE FUNKCIJE
-================================ */
+--------------------------- */
 
 function broj(text) {
 
@@ -217,9 +208,7 @@ function popraviTip(text) {
 
     const m = s.match(/[0-9]:[0-9]/);
 
-    if (!m) return null;
-
-    return m[0];
+    return m ? m[0] : null;
 }
 
 
@@ -251,37 +240,77 @@ function centarX(word) {
 }
 
 
-/* ================================
-   GRUPIRANJE OCR RIJEČI U REDOVE
-================================ */
+/* ---------------------------
+   IZVLAČENJE RIJEČI IZ BLOCKS
+--------------------------- */
+
+function izvuciWordsIzBlocks(blocks) {
+
+    const words = [];
+
+    if (!blocks) return words;
+
+    for (const block of blocks) {
+
+        const paragraphs =
+            block.paragraphs || [];
+
+        for (const paragraph of paragraphs) {
+
+            const lines =
+                paragraph.lines || [];
+
+            for (const line of lines) {
+
+                const lineWords =
+                    line.words || [];
+
+                for (const word of lineWords) {
+
+                    if (
+                        word &&
+                        word.text &&
+                        word.bbox
+                    ) {
+
+                        words.push(word);
+                    }
+                }
+            }
+        }
+    }
+
+    return words;
+}
+
+
+/* ---------------------------
+   GRUPIRANJE RIJEČI U REDOVE
+--------------------------- */
 
 function napraviRedove(words) {
 
-    const ciste = words.filter(w => {
+    const ciste = words
+        .filter(w =>
+            w.text &&
+            w.text.trim() &&
+            w.bbox
+        )
+        .sort((a, b) => {
 
-        if (!w.text) return false;
+            const ya = centarY(a);
+            const yb = centarY(b);
 
-        const txt = w.text.trim();
+            if (Math.abs(ya - yb) <= 8) {
+                return a.bbox.x0 - b.bbox.x0;
+            }
 
-        if (!txt) return false;
-
-        return true;
-    });
-
-    ciste.sort((a, b) => {
-
-        const ya = centarY(a);
-        const yb = centarY(b);
-
-        if (Math.abs(ya - yb) < 8) {
-            return a.bbox.x0 - b.bbox.x0;
-        }
-
-        return ya - yb;
-    });
+            return ya - yb;
+        });
 
 
     const redovi = [];
+
 
     for (const word of ciste) {
 
@@ -290,20 +319,22 @@ function napraviRedove(words) {
         let najbolji = null;
         let najmanjaRazlika = Infinity;
 
+
         for (const red of redovi) {
 
             const razlika =
                 Math.abs(red.y - y);
 
             if (
-                razlika < najmanjaRazlika &&
-                razlika <= 10
+                razlika <= 12 &&
+                razlika < najmanjaRazlika
             ) {
 
-                najmanjaRazlika = razlika;
                 najbolji = red;
+                najmanjaRazlika = razlika;
             }
         }
+
 
         if (!najbolji) {
 
@@ -315,17 +346,23 @@ function napraviRedove(words) {
             redovi.push(najbolji);
         }
 
+
         najbolji.words.push(word);
+
 
         najbolji.y =
             najbolji.words.reduce(
-                (sum, w) => sum + centarY(w),
+                (sum, w) =>
+                    sum + centarY(w),
                 0
             ) / najbolji.words.length;
     }
 
 
-    redovi.sort((a, b) => a.y - b.y);
+    redovi.sort((a, b) =>
+        a.y - b.y
+    );
+
 
     for (const red of redovi) {
 
@@ -336,13 +373,14 @@ function napraviRedove(words) {
         );
     }
 
+
     return redovi;
 }
 
 
-/* ================================
-   PREPOZNAVANJE STUPACA
-================================ */
+/* ---------------------------
+   ANALIZA PO STUPCIMA
+--------------------------- */
 
 function analizirajRed(red, sirina) {
 
@@ -367,16 +405,8 @@ function analizirajRed(red, sirina) {
 
 
         /*
-          STUPCI IZ TVOJE TABLICE
-
-          Vrijeme  ~ 0.26 - 0.31
-          Naziv    ~ 0.31 - 0.56
-          1        ~ 0.56 - 0.61
-          X        ~ 0.61 - 0.65
-          2        ~ 0.65 - 0.70
-          Tip      ~ 0.69 - 0.73
+            Prilagođeno tvojoj tablici
         */
-
 
         if (x < 0.31) {
 
@@ -410,6 +440,7 @@ function analizirajRed(red, sirina) {
 
 
     return {
+
         vrijeme:
             dijelovi.vrijeme.join(" ").trim(),
 
@@ -437,9 +468,9 @@ function analizirajRed(red, sirina) {
 }
 
 
-/* ================================
-   PREPOZNAVANJE LIGE
-================================ */
+/* ---------------------------
+   LIGA
+--------------------------- */
 
 function jeLiga(parsed) {
 
@@ -452,30 +483,27 @@ function jeLiga(parsed) {
         return false;
     }
 
+
     const cijeli =
         parsed.cijeli.toLowerCase();
 
-    /*
-      Zaglavlje stupaca nije liga
-    */
 
     if (
-        /\btip\b/i.test(cijeli) &&
-        /\b1\b/.test(cijeli) &&
-        /\b2\b/.test(cijeli)
+        cijeli.includes("tip") &&
+        cijeli.includes("1") &&
+        cijeli.includes("2")
     ) {
         return false;
     }
 
 
-    const ligaRijeci = [
+    const rijeci = [
         "liga",
         "league",
         "premier",
         "premiership",
         "division",
         "división",
-        "divizion",
         "serie",
         "bundesliga",
         "superliga",
@@ -487,25 +515,23 @@ function jeLiga(parsed) {
         "segunda",
         "primera",
         "süper",
-        "1. snl",
-        "2. snl",
+        "snl",
         "cup"
     ];
 
 
+    const malo =
+        naziv.toLowerCase();
+
+
     if (
-        ligaRijeci.some(r =>
-            naziv.toLowerCase().includes(r)
+        rijeci.some(r =>
+            malo.includes(r)
         )
     ) {
         return true;
     }
 
-
-    /*
-      Naslovi liga često nemaju vrijeme,
-      a zauzimaju nazivni stupac.
-    */
 
     if (
         !parsed.vrijeme &&
@@ -522,9 +548,9 @@ function jeLiga(parsed) {
 }
 
 
-/* ================================
-   ČITANJE JEDNE SLIKE
-================================ */
+/* ---------------------------
+   ČITANJE SLIKE
+--------------------------- */
 
 async function obradiSliku(file, brojSlike, ukupno) {
 
@@ -532,10 +558,10 @@ async function obradiSliku(file, brojSlike, ukupno) {
         document.getElementById("status");
 
 
-    const rezultat =
-        await Tesseract.recognize(
-            file,
+    const worker =
+        await Tesseract.createWorker(
             "eng",
+            1,
             {
                 logger: m => {
 
@@ -557,56 +583,55 @@ async function obradiSliku(file, brojSlike, ukupno) {
         );
 
 
-    /*
-      Tesseract v5 može vratiti words.
-      Ako words nisu dostupne, uzimamo simbole
-      iz blocks strukture.
-    */
+    const rezultat =
+        await worker.recognize(
+            file,
+            {},
+            {
+                text: true,
+                blocks: true
+            }
+        );
 
-    let words =
-        rezultat.data.words || [];
+
+    await worker.terminate();
+
+
+    let words = [];
 
 
     if (
-        (!words || !words.length) &&
         rezultat.data.blocks
     ) {
 
-        words = [];
-
-        for (
-            const block of rezultat.data.blocks
-        ) {
-
-            for (
-                const paragraph of
-                block.paragraphs || []
-            ) {
-
-                for (
-                    const line of
-                    paragraph.lines || []
-                ) {
-
-                    for (
-                        const word of
-                        line.words || []
-                    ) {
-
-                        words.push(word);
-                    }
-                }
-            }
-        }
+        words =
+            izvuciWordsIzBlocks(
+                rezultat.data.blocks
+            );
     }
 
 
+    /*
+       Rezervna opcija
+    */
+
+    if (
+        words.length === 0 &&
+        rezultat.data.words
+    ) {
+
+        words =
+            rezultat.data.words;
+    }
+
+
+    console.log(
+        "Broj OCR riječi:",
+        words.length
+    );
+
+
     if (!words.length) {
-
-        console.log(
-            "Tesseract nije vratio položaje riječi."
-        );
-
         return [];
     }
 
@@ -614,7 +639,9 @@ async function obradiSliku(file, brojSlike, ukupno) {
     const sirina =
         rezultat.data.width ||
         Math.max(
-            ...words.map(w => w.bbox.x1)
+            ...words.map(
+                w => w.bbox.x1
+            )
         );
 
 
@@ -622,8 +649,15 @@ async function obradiSliku(file, brojSlike, ukupno) {
         napraviRedove(words);
 
 
+    console.log(
+        "Broj redova:",
+        redovi.length
+    );
+
+
     let trenutnaLiga =
         "Nepoznata liga";
+
 
     const utakmice = [];
 
@@ -637,13 +671,19 @@ async function obradiSliku(file, brojSlike, ukupno) {
             );
 
 
+        console.log(
+            "RED:",
+            p
+        );
+
+
         /*
-          LIGA
+           Liga
         */
 
         if (jeLiga(p)) {
 
-            let nazivLige =
+            let liga =
                 p.naziv
                     .replace(
                         /\b1\s+X\s+2\s+Tip\b/gi,
@@ -651,9 +691,10 @@ async function obradiSliku(file, brojSlike, ukupno) {
                     )
                     .trim();
 
-            if (nazivLige) {
+
+            if (liga) {
                 trenutnaLiga =
-                    nazivLige;
+                    liga;
             }
 
             continue;
@@ -661,10 +702,10 @@ async function obradiSliku(file, brojSlike, ukupno) {
 
 
         /*
-          UTAKMICA MORA IMATI VRIJEME
+           Vrijeme
         */
 
-        let vrijeme =
+        const vrijeme =
             p.vrijeme
                 .split(/\s+/)
                 .find(jeVrijeme);
@@ -676,10 +717,10 @@ async function obradiSliku(file, brojSlike, ukupno) {
 
 
         /*
-          NAZIV PARA
+           Naziv utakmice
         */
 
-        let naziv =
+        const naziv =
             p.naziv
                 .replace(/\s+/g, " ")
                 .trim();
@@ -694,7 +735,7 @@ async function obradiSliku(file, brojSlike, ukupno) {
 
 
         /*
-          KVOTE
+           Kvote
         */
 
         const q1 =
@@ -717,7 +758,7 @@ async function obradiSliku(file, brojSlike, ukupno) {
 
 
         /*
-          TIP
+           Tip
         */
 
         const tip =
@@ -730,7 +771,7 @@ async function obradiSliku(file, brojSlike, ukupno) {
 
 
         /*
-          SAMO DOZVOLJENI TIPOVI
+           Samo dozvoljeni tipovi
         */
 
         if (
@@ -741,8 +782,8 @@ async function obradiSliku(file, brojSlike, ukupno) {
 
 
         /*
-          KVOTA NA DOMAĆINA
-          ≤ 1.60 UKLJUČUJUĆI 1.60
+           Kvota domaćina mora biti
+           <= 1.60
         */
 
         if (
@@ -753,10 +794,6 @@ async function obradiSliku(file, brojSlike, ukupno) {
         }
 
 
-        /*
-          OSNOVNA PROVJERA OSTALIH KVOTA
-        */
-
         if (
             qx < 1 ||
             q2 < 1
@@ -766,16 +803,18 @@ async function obradiSliku(file, brojSlike, ukupno) {
 
 
         const dijelovi =
-            naziv.split(/\s+-\s+/);
+            naziv.split(
+                /\s+-\s+/
+            );
 
 
-        let domacin =
+        const domacin =
             dijelovi[0]
                 ? dijelovi[0].trim()
                 : naziv;
 
 
-        let gost =
+        const gost =
             dijelovi.length > 1
                 ? dijelovi
                     .slice(1)
@@ -802,13 +841,15 @@ async function obradiSliku(file, brojSlike, ukupno) {
 }
 
 
-/* ================================
+/* ---------------------------
    DUPLIKATI
-================================ */
+--------------------------- */
 
 function ukloniDuplikate(lista) {
 
-    const set = new Set();
+    const set =
+        new Set();
+
 
     return lista.filter(u => {
 
@@ -823,7 +864,9 @@ function ukloniDuplikate(lista) {
         .toLowerCase();
 
 
-        if (set.has(key)) {
+        if (
+            set.has(key)
+        ) {
             return false;
         }
 
@@ -835,37 +878,39 @@ function ukloniDuplikate(lista) {
 }
 
 
-/* ================================
+/* ---------------------------
    SORTIRANJE
-================================ */
+--------------------------- */
 
 function sortiraj(lista) {
 
-    return lista.sort((a, b) => {
+    return lista.sort(
+        (a, b) => {
 
-        const A =
-            REDOSLIJED[a.tip];
+            const A =
+                REDOSLIJED[a.tip];
 
-        const B =
-            REDOSLIJED[b.tip];
+            const B =
+                REDOSLIJED[b.tip];
 
 
-        if (A !== B) {
-            return A - B;
+            if (A !== B) {
+                return A - B;
+            }
+
+
+            return (
+                a.jedan -
+                b.jedan
+            );
         }
-
-
-        return (
-            a.jedan -
-            b.jedan
-        );
-    });
+    );
 }
 
 
-/* ================================
+/* ---------------------------
    PRIKAZ
-================================ */
+--------------------------- */
 
 function prikazi(lista) {
 
@@ -988,9 +1033,9 @@ function prikazi(lista) {
 }
 
 
-/* ================================
-   GLAVNA ANALIZA
-================================ */
+/* ---------------------------
+   GLAVNA FUNKCIJA
+--------------------------- */
 
 async function analizirajSlike() {
 
@@ -1023,7 +1068,9 @@ async function analizirajSlike() {
     }
 
 
-    gumb.disabled = true;
+    gumb.disabled =
+        true;
+
 
     document.getElementById(
         "rezultati"
@@ -1045,7 +1092,7 @@ async function analizirajSlike() {
                 `Čitam sliku ${i + 1} od ${input.files.length}...`;
 
 
-            const utakmice =
+            const pronadjene =
                 await obradiSliku(
                     input.files[i],
                     i + 1,
@@ -1054,39 +1101,51 @@ async function analizirajSlike() {
 
 
             sve.push(
-                ...utakmice
+                ...pronadjene
             );
         }
 
 
         sve =
-            ukloniDuplikate(sve);
+            ukloniDuplikate(
+                sve
+            );
 
 
         sve =
-            sortiraj(sve);
+            sortiraj(
+                sve
+            );
 
 
-        prikazi(sve);
+        prikazi(
+            sve
+        );
 
 
         status.textContent =
             `Gotovo. Pronađeno utakmica: ${sve.length}`;
 
 
-    } catch (greska) {
+    }
+    catch (greska) {
 
-        console.error(greska);
-
-        status.textContent =
-            "Greška tijekom analize.";
-
-        alert(
-            "Dogodila se greška tijekom čitanja slike."
+        console.error(
+            greska
         );
 
 
-    } finally {
+        status.textContent =
+            "Greška tijekom analize slike.";
+
+
+        alert(
+            "Dogodila se greška tijekom analize."
+        );
+
+
+    }
+    finally {
 
         gumb.disabled =
             false;
