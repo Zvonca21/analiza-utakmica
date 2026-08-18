@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analiza utakmica</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f2f2f2;margin:0;padding:20px}
+.container{max-width:700px;margin:auto;background:white;padding:20px;border-radius:12px}
+h1{text-align:center}
+input,button{width:100%;padding:14px;margin-top:10px;box-sizing:border-box}
+button{background:#222;color:white;border:0;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Analiza nogometnih utakmica</h1>
+
+<input type="file" id="slike" accept="image/*" multiple>
+
+<button onclick="analiziraj()">Analiziraj utakmice</button>
+
+<div id="rezultat"></div>
+</div>
+
+<script>
+function analiziraj(){
+    const slike=document.getElementById("slike").files;
+    const rezultat=document.getElementById("rezultat");
+
+    if(slike.length===0){
+        rezultat.innerHTML="<p>Odaberi jednu ili više slika.</p>";
+        return;
+    }
+
+    rezultat.innerHTML="<p>Slike su učitane.</p>";
+}
+</script>
+
+</body>
+</html>
