@@ -26,7 +26,6 @@ body {
 
 h1 {
     text-align: center;
-    font-size: 25px;
 }
 
 input {
@@ -43,7 +42,6 @@ button {
     border-radius: 8px;
     font-size: 17px;
     font-weight: bold;
-    cursor: pointer;
 }
 
 #status {
@@ -53,72 +51,51 @@ button {
     border-radius: 8px;
 }
 
-.warning {
-    padding: 14px;
-    background: #fff3cd;
-    border-radius: 8px;
-    margin-top: 15px;
-}
-
 .table-container {
     overflow-x: auto;
-    margin-top: 20px;
 }
 
 table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0 8px;
-    min-width: 650px;
+    border-collapse: collapse;
+    min-width: 700px;
 }
 
-thead th {
+th {
     background: #222;
     color: white;
-    padding: 12px 8px;
-    text-align: left;
+    padding: 10px;
+    border: 1px solid #ccc;
 }
 
-tbody td {
-    background: #f7f7f7;
-    padding: 12px 8px;
-    border-top: 1px solid #ddd;
-    border-bottom: 1px solid #ddd;
-}
-
-tbody td:first-child {
-    border-left: 1px solid #ddd;
-}
-
-tbody td:last-child {
-    border-right: 1px solid #ddd;
+td {
+    padding: 10px;
+    border: 1px solid #ccc;
 }
 
 .tip {
     font-weight: bold;
-    font-size: 18px;
     text-align: center;
 }
 
 .kvota {
     text-align: center;
-    font-weight: bold;
 }
 
-.debug {
+.warning {
+    background: #fff3cd;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+details {
     margin-top: 20px;
 }
 
-.debug summary {
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.debug pre {
+pre {
     white-space: pre-wrap;
     background: #eee;
     padding: 10px;
-    font-size: 12px;
 }
 </style>
 </head>
@@ -129,9 +106,7 @@ tbody td:last-child {
 
 <h1>⚽ Analiza nogometnih utakmica</h1>
 
-<p>
-Odaberi jednu ili više slika s ponudom utakmica.
-</p>
+<p>Odaberi jednu ili više slika.</p>
 
 <input
     type="file"
@@ -154,9 +129,9 @@ Odaberi jednu ili više slika s ponudom utakmica.
 
 <script>
 
-const MAX_KVOTA_DOMACIN = 1.60;
+const MAX_KVOTA = 1.60;
 
-const DOZVOLJENI_TIPOVI = [
+const TIPOVI = [
     "2:0",
     "2:1",
     "3:0",
@@ -165,7 +140,7 @@ const DOZVOLJENI_TIPOVI = [
     "4:1"
 ];
 
-const REDOSLIJED_REZULTATA = {
+const REDOSLIJED = {
     "2:0": 0,
     "2:1": 1,
     "3:0": 2,
@@ -187,14 +162,16 @@ async function pokreniAnalizu() {
         document.getElementById("rezultati");
 
     if (slike.length === 0) {
+
         status.innerHTML =
             "Odaberi barem jednu sliku.";
+
         return;
     }
 
     rezultati.innerHTML = "";
 
-    let cijeliTekst = "";
+    let tekst = "";
 
     for (let i = 0; i < slike.length; i++) {
 
@@ -214,295 +191,403 @@ async function pokreniAnalizu() {
                     {
                         logger: m => {
 
-                            if (m.status ===
-                                "recognizing text") {
-
-                                const postotak =
-                                    Math.round(
-                                        (m.progress || 0) * 100
-                                    );
+                            if (
+                                m.status ===
+                                "recognizing text"
+                            ) {
 
                                 status.innerHTML =
                                     "Čitam sliku " +
                                     (i + 1) +
-                                    " od " +
-                                    slike.length +
                                     " — " +
-                                    postotak +
+                                    Math.round(
+                                        m.progress * 100
+                                    ) +
                                     "%";
                             }
                         }
                     }
                 );
 
-            cijeliTekst +=
+            tekst +=
                 "\n" +
                 rezultat.data.text;
 
-        } catch (greska) {
+        } catch (e) {
 
-            console.error(greska);
-
-            status.innerHTML =
-                "Greška pri čitanju slike.";
+            console.error(e);
         }
     }
 
     status.innerHTML =
-        "Čitanje završeno. Analiziram utakmice...";
+        "Analiziram...";
 
-    obradiTekst(cijeliTekst);
+    obradiTekst(tekst);
 }
 
 
+/* ===============================
+   PRETVARANJE OCR BROJA U KVOTU
+================================ */
 
-/* ==========================================
-   NORMALIZACIJA OCR TEKSTA
-========================================== */
+function pretvoriKvotu(tekst) {
 
-function normalizirajTekst(tekst) {
+    tekst =
+        tekst
+        .replace(",", ".")
+        .trim();
 
-    return tekst
-        .replace(/\r/g, "")
-        .replace(/[|]/g, " ")
-        .replace(/\s+/g, " ")
-        .replace(/(\d)\s*[:;]\s*(\d)/g, "$1:$2")
-        .replace(/(\d)\s*,\s*(\d{2})/g, "$1.$2");
+    if (tekst.includes(".")) {
+
+        const broj =
+            parseFloat(tekst);
+
+        if (
+            broj >= 1.01 &&
+            broj <= 50
+        ) {
+            return broj;
+        }
+    }
+
+    /*
+    OCR često:
+
+    138 = 1.38
+    150 = 1.50
+    460 = 4.60
+    595 = 5.95
+    */
+
+    if (/^\d{3}$/.test(tekst)) {
+
+        const broj =
+            parseInt(tekst, 10) / 100;
+
+        if (
+            broj >= 1.01 &&
+            broj <= 50
+        ) {
+            return broj;
+        }
+    }
+
+    /*
+    Npr. 1410 ponekad može biti 14.10
+    */
+
+    if (/^\d{4}$/.test(tekst)) {
+
+        const broj =
+            parseInt(tekst, 10) / 100;
+
+        if (
+            broj >= 1.01 &&
+            broj <= 50
+        ) {
+            return broj;
+        }
+    }
+
+    return null;
 }
 
 
+/* ===============================
+   PRETVARANJE OCR TIPA
+================================ */
 
-/* ==========================================
-   PREPOZNAVANJE UTAKMICA
-========================================== */
+function pretvoriTip(tekst) {
+
+    tekst =
+        tekst
+        .replace(/\s/g, "")
+        .replace(";", ":");
+
+    if (TIPOVI.includes(tekst)) {
+        return tekst;
+    }
+
+    const mapa = {
+        "20": "2:0",
+        "21": "2:1",
+        "30": "3:0",
+        "31": "3:1",
+        "40": "4:0",
+        "41": "4:1"
+    };
+
+    if (mapa[tekst]) {
+        return mapa[tekst];
+    }
+
+    return null;
+}
+
+
+/* ===============================
+   GLAVNA OBRADA
+================================ */
 
 function obradiTekst(tekst) {
 
-    const originalniRedovi = tekst
+    const redovi =
+        tekst
         .split("\n")
         .map(r => r.trim())
         .filter(r => r.length > 0);
 
     const utakmice = [];
 
-    for (let i = 0; i < originalniRedovi.length; i++) {
+    let trenutnaLiga = "";
+
+    for (let i = 0; i < redovi.length; i++) {
+
+        const red =
+            redovi[i];
 
         /*
-        Spajamo nekoliko susjednih OCR redova jer
-        Tesseract ponekad razdvoji jednu utakmicu
-        na više redova.
+        Ako red izgleda kao naziv lige.
         */
 
-        const blok = [
-            originalniRedovi[i - 2] || "",
-            originalniRedovi[i - 1] || "",
-            originalniRedovi[i] || "",
-            originalniRedovi[i + 1] || "",
-            originalniRedovi[i + 2] || ""
-        ].join(" ");
+        if (
+            !red.includes(" - ") &&
+            (
+                /league/i.test(red) ||
+                /liga/i.test(red) ||
+                /division/i.test(red) ||
+                /ettan/i.test(red) ||
+                /championship/i.test(red) ||
+                /promotion/i.test(red) ||
+                /superettan/i.test(red)
+            )
+        ) {
 
-        const cistiBlok =
-            normalizirajTekst(blok);
-
-        /*
-        Tražimo Tip sa slike.
-        NE izračunavamo rezultat iz kvota.
-        */
-
-        const tipMatch =
-            cistiBlok.match(
-                /\b(2:0|2:1|3:0|3:1|4:0|4:1)\b/
-            );
-
-        if (!tipMatch) {
-            continue;
-        }
-
-        const tip = tipMatch[1];
-
-        if (!DOZVOLJENI_TIPOVI.includes(tip)) {
-            continue;
-        }
-
-        /*
-        Pronalazimo decimalne kvote.
-        */
-
-        const brojevi =
-            cistiBlok.match(
-                /\b\d{1,2}[.,]\d{1,2}\b/g
-            );
-
-        if (!brojevi ||
-            brojevi.length < 3) {
+            trenutnaLiga =
+                ocistiLigu(red);
 
             continue;
         }
 
+
         /*
-        Tražimo grupu od 3 kvote:
-        1, X i 2.
+        Utakmica mora imati "-" između ekipa.
         */
 
-        let kvota1 = null;
-        let kvotaX = null;
-        let kvota2 = null;
+        if (!red.includes(" - ")) {
+            continue;
+        }
 
-        for (let b = 0;
-             b <= brojevi.length - 3;
-             b++) {
 
-            const k1 =
-                parseFloat(
-                    brojevi[b]
-                    .replace(",", ".")
+        /*
+        Tokenizacija.
+        */
+
+        const tokeni =
+            red.split(/\s+/);
+
+
+        /*
+        Tražimo početak kvota.
+        Prve tri valjane kvote iza naziva.
+        */
+
+        const kvote = [];
+
+        let indeksPrveKvote = -1;
+
+        for (
+            let t = 0;
+            t < tokeni.length;
+            t++
+        ) {
+
+            const k =
+                pretvoriKvotu(
+                    tokeni[t]
                 );
 
-            const kx =
-                parseFloat(
-                    brojevi[b + 1]
-                    .replace(",", ".")
-                );
+            if (k !== null) {
 
-            const k2 =
-                parseFloat(
-                    brojevi[b + 2]
-                    .replace(",", ".")
-                );
+                if (
+                    indeksPrveKvote === -1
+                ) {
+                    indeksPrveKvote = t;
+                }
 
-            /*
-            Realan raspon nogometnih kvota.
-            */
+                kvote.push({
+                    indeks: t,
+                    vrijednost: k
+                });
+            }
+        }
+
+
+        if (kvote.length < 3) {
+            continue;
+        }
+
+
+        /*
+        Uzimamo zadnju logičnu grupu
+        1 X 2 prije Tipa.
+        */
+
+        let najboljaGrupa = null;
+
+        for (
+            let k = 0;
+            k <= kvote.length - 3;
+            k++
+        ) {
+
+            const a = kvote[k];
+            const b = kvote[k + 1];
+            const c = kvote[k + 2];
 
             if (
-                k1 >= 1.01 &&
-                k1 <= 30 &&
-                kx >= 1.01 &&
-                kx <= 30 &&
-                k2 >= 1.01 &&
-                k2 <= 50
+                b.indeks === a.indeks + 1 &&
+                c.indeks === b.indeks + 1
             ) {
 
-                kvota1 = k1;
-                kvotaX = kx;
-                kvota2 = k2;
+                najboljaGrupa = [
+                    a,
+                    b,
+                    c
+                ];
+            }
+        }
+
+        if (!najboljaGrupa) {
+            continue;
+        }
+
+
+        const kvota1 =
+            najboljaGrupa[0].vrijednost;
+
+        const kvotaX =
+            najboljaGrupa[1].vrijednost;
+
+        const kvota2 =
+            najboljaGrupa[2].vrijednost;
+
+
+        /*
+        Strogo manje od 1.60.
+        */
+
+        if (kvota1 >= MAX_KVOTA) {
+            continue;
+        }
+
+
+        /*
+        Tip tražimo nakon treće kvote.
+        */
+
+        let tip = null;
+
+        for (
+            let t =
+                najboljaGrupa[2].indeks + 1;
+            t < tokeni.length;
+            t++
+        ) {
+
+            const kandidat =
+                pretvoriTip(
+                    tokeni[t]
+                );
+
+            if (kandidat) {
+
+                tip = kandidat;
 
                 break;
             }
         }
 
-        if (kvota1 === null) {
+        if (!tip) {
             continue;
         }
 
-        /*
-        VAŽNO:
-        domaća kvota mora biti STROGO
-        MANJA od 1.60.
 
-        1.59 = DA
-        1.60 = NE
+        /*
+        Naziv utakmice nalazi se prije
+        prve kvote.
         */
 
-        if (kvota1 >= MAX_KVOTA_DOMACIN) {
-            continue;
+        let nazivTokeni =
+            tokeni.slice(
+                0,
+                najboljaGrupa[0].indeks
+            );
+
+
+        /*
+        Uklanjamo vrijeme:
+        14:00, 12:30 itd.
+        */
+
+        if (
+            nazivTokeni.length > 0 &&
+            /^\d{1,2}:\d{2}$/
+            .test(nazivTokeni[0])
+        ) {
+
+            nazivTokeni.shift();
         }
 
-        /*
-        Pokušaj pronalaska naziva utakmice.
-        */
 
         let naziv =
-            pronadiUtakmicu(
-                originalniRedovi,
-                i
-            );
+            nazivTokeni.join(" ").trim();
 
-        let domacin = "";
-        let gost = "";
 
-        if (naziv) {
+        const dijelovi =
+            naziv.split(" - ");
 
-            let dijelovi = null;
 
-            if (naziv.includes(" - ")) {
-                dijelovi =
-                    naziv.split(" - ");
-            }
-
-            else if (
-                naziv.toLowerCase()
-                .includes(" vs ")
-            ) {
-                dijelovi =
-                    naziv.split(
-                        /\s+vs\s+/i
-                    );
-            }
-
-            if (dijelovi &&
-                dijelovi.length >= 2) {
-
-                domacin =
-                    dijelovi[0].trim();
-
-                gost =
-                    dijelovi
-                    .slice(1)
-                    .join(" - ")
-                    .trim();
-            }
-
-            else {
-
-                domacin = naziv;
-                gost = "";
-            }
-        }
-
-        const liga =
-            pronadiLigu(
-                originalniRedovi,
-                i,
-                naziv
-            );
-
-        /*
-        Sprječavanje duplikata jer analiziramo
-        nekoliko susjednih OCR redova.
-        */
-
-        const postoji =
-            utakmice.some(u =>
-                u.tip === tip &&
-                Math.abs(
-                    u.kvota1 - kvota1
-                ) < 0.001 &&
-                (
-                    u.domacin === domacin ||
-                    (!u.domacin && !domacin)
-                )
-            );
-
-        if (postoji) {
+        if (dijelovi.length < 2) {
             continue;
         }
 
+
+        const domacin =
+            dijelovi[0].trim();
+
+        const gost =
+            dijelovi
+            .slice(1)
+            .join(" - ")
+            .trim();
+
+
+        /*
+        Dodavanje utakmice.
+        */
+
         utakmice.push({
-            liga,
-            domacin,
-            gost,
-            kvota1,
-            kvotaX,
-            kvota2,
-            tip
+
+            tip: tip,
+
+            liga: trenutnaLiga,
+
+            domacin: domacin,
+
+            gost: gost,
+
+            kvota1: kvota1,
+
+            kvotaX: kvotaX,
+
+            kvota2: kvota2
         });
     }
 
 
     /*
-    SORTIRANJE PO TIPU:
-
+    SORTIRANJE:
     2:0
     2:1
     3:0
@@ -511,23 +596,24 @@ function obradiTekst(tekst) {
     4:1
     */
 
-    utakmice.sort((a, b) => {
+    utakmice.sort(
+        (a, b) => {
 
-        const razlika =
-            REDOSLIJED_REZULTATA[a.tip] -
-            REDOSLIJED_REZULTATA[b.tip];
+            const razlika =
+                REDOSLIJED[a.tip] -
+                REDOSLIJED[b.tip];
 
-        if (razlika !== 0) {
-            return razlika;
+            if (razlika !== 0) {
+                return razlika;
+            }
+
+            return (
+                a.kvota1 -
+                b.kvota1
+            );
         }
+    );
 
-        /*
-        Unutar istog Tipa sortiramo
-        od najmanje kvote domaćina.
-        */
-
-        return a.kvota1 - b.kvota1;
-    });
 
     prikaziUtakmice(
         utakmice,
@@ -536,154 +622,32 @@ function obradiTekst(tekst) {
 }
 
 
+/* ===============================
+   ČIŠĆENJE LIGE
+================================ */
 
-/* ==========================================
-   PRONALAŽENJE NAZIVA UTAKMICE
-========================================== */
+function ocistiLigu(red) {
 
-function pronadiUtakmicu(redovi, pozicija) {
-
-    const pocetak =
-        Math.max(0, pozicija - 4);
-
-    const kraj =
-        Math.min(
-            redovi.length - 1,
-            pozicija + 2
-        );
-
-    /*
-    Prvo tražimo red koji već sadrži
-    "-" između domaćina i gosta.
-    */
-
-    for (let i = pocetak;
-         i <= kraj;
-         i++) {
-
-        const r = redovi[i];
-
-        if (
-            /\s-\s/.test(r) &&
-            !/\d+[.,]\d+/.test(r)
-        ) {
-
-            return ocistiNaziv(r);
-        }
-    }
-
-
-    /*
-    OCR ponekad utakmicu pročita zajedno
-    s kvotama.
-    */
-
-    for (let i = pocetak;
-         i <= kraj;
-         i++) {
-
-        let r = redovi[i];
-
-        if (/\s-\s/.test(r)) {
-
-            r = r.replace(
-                /\b\d{1,2}[.,]\d{1,2}\b.*$/g,
-                ""
-            );
-
-            return ocistiNaziv(r);
-        }
-    }
-
-    return "";
-}
-
-
-
-function ocistiNaziv(naziv) {
-
-    return naziv
+    return red
         .replace(
-            /\b(2:0|2:1|3:0|3:1|4:0|4:1)\b/g,
+            /^\d+\s+/,
             ""
         )
-        .replace(/\s+/g, " ")
+        .replace(
+            /\s+1\s+Xx?\s+2\s+Tp.*$/i,
+            ""
+        )
+        .replace(
+            /\s+1\s+X\s+2\s+Tip.*$/i,
+            ""
+        )
         .trim();
 }
 
 
-
-/* ==========================================
-   PRONALAŽENJE LIGE
-========================================== */
-
-function pronadiLigu(
-    redovi,
-    pozicija,
-    naziv
-) {
-
-    const pocetak =
-        Math.max(0, pozicija - 6);
-
-    for (let i = pozicija - 1;
-         i >= pocetak;
-         i--) {
-
-        const r =
-            redovi[i].trim();
-
-        if (!r) {
-            continue;
-        }
-
-        if (
-            naziv &&
-            r.includes(naziv)
-        ) {
-            continue;
-        }
-
-        if (
-            /\b\d{1,2}[.,]\d{1,2}\b/.test(r)
-        ) {
-            continue;
-        }
-
-        if (
-            /\b(2:0|2:1|3:0|3:1|4:0|4:1)\b/
-            .test(r)
-        ) {
-            continue;
-        }
-
-        if (
-            /\s-\s/.test(r)
-        ) {
-            continue;
-        }
-
-        /*
-        Česti nazivi liga / država.
-        */
-
-        if (
-            /championship|league|liga|super|division|promotion|ettan|usa|sweden|switzerland|england|germany|italy|spain|france|croatia|austria|belgium|netherlands/i
-            .test(r)
-        ) {
-
-            return r;
-        }
-    }
-
-    return "";
-}
-
-
-
-/* ==========================================
-   PRIKAZ REZULTATA U TABLICI
-========================================== */
+/* ===============================
+   PRIKAZ
+================================ */
 
 function prikaziUtakmice(
     utakmice,
@@ -700,134 +664,154 @@ function prikaziUtakmice(
             "status"
         );
 
-    rezultati.innerHTML = "";
-
     if (utakmice.length === 0) {
 
         status.innerHTML =
             "Analiza završena.";
 
         rezultati.innerHTML = `
-            <div class="warning">
-                <strong>Nema pronađenih utakmica.</strong>
-                <br><br>
-                Uvjeti:
-                Tip mora biti 2:0, 2:1, 3:0,
-                3:1, 4:0 ili 4:1,
-                a kvota na domaćina mora biti
-                <strong>manja od 1.60</strong>.
-            </div>
 
-            <details class="debug">
-                <summary>
-                    Prikaži tekst koji je OCR pročitao
-                </summary>
-                <pre>${sigurno(originalniTekst)}</pre>
-            </details>
+        <div class="warning">
+
+            <strong>
+            Nema pronađenih utakmica.
+            </strong>
+
+            <br><br>
+
+            Tip mora biti
+            2:0, 2:1, 3:0, 3:1,
+            4:0 ili 4:1.
+
+            <br>
+
+            Kvota na domaćina mora biti
+            <strong>manja od 1.60</strong>.
+
+        </div>
+
+        <details>
+
+            <summary>
+            Prikaži OCR tekst
+            </summary>
+
+            <pre>
+${sigurno(originalniTekst)}
+            </pre>
+
+        </details>
         `;
 
         return;
     }
 
+
     status.innerHTML =
-        "Gotovo! Pronađeno utakmica: " +
-        utakmice.length;
+        "Gotovo! Pronađeno: " +
+        utakmice.length +
+        " utakmica.";
+
 
     let html = `
-        <h2>Odabrane utakmice</h2>
 
-        <div class="table-container">
+    <div class="table-container">
 
-        <table>
+    <table>
 
-            <thead>
-                <tr>
-                    <th>Tip</th>
-                    <th>Utakmica</th>
-                    <th>Liga</th>
-                    <th>1</th>
-                    <th>X</th>
-                    <th>2</th>
-                </tr>
-            </thead>
+    <thead>
 
-            <tbody>
+    <tr>
+
+        <th>Tip</th>
+
+        <th>Utakmica</th>
+
+        <th>Liga</th>
+
+        <th>1</th>
+
+        <th>X</th>
+
+        <th>2</th>
+
+    </tr>
+
+    </thead>
+
+    <tbody>
     `;
+
 
     utakmice.forEach(u => {
 
-        let utakmica = "";
-
-        if (u.gost) {
-
-            utakmica =
-                sigurno(u.domacin) +
-                " - " +
-                sigurno(u.gost);
-
-        } else {
-
-            utakmica =
-                sigurno(u.domacin) ||
-                "Naziv nije prepoznat";
-        }
-
         html += `
-            <tr>
 
-                <td class="tip">
-                    ${sigurno(u.tip)}
-                </td>
+        <tr>
 
-                <td>
-                    <strong>
-                        ${utakmica}
-                    </strong>
-                </td>
+            <td class="tip">
+                ${u.tip}
+            </td>
 
-                <td>
-                    ${sigurno(u.liga) || "-"}
-                </td>
+            <td>
+                <strong>
+                ${sigurno(u.domacin)}
+                -
+                ${sigurno(u.gost)}
+                </strong>
+            </td>
 
-                <td class="kvota">
-                    ${u.kvota1.toFixed(2)}
-                </td>
+            <td>
+                ${sigurno(u.liga)}
+            </td>
 
-                <td class="kvota">
-                    ${u.kvotaX.toFixed(2)}
-                </td>
+            <td class="kvota">
+                ${u.kvota1.toFixed(2)}
+            </td>
 
-                <td class="kvota">
-                    ${u.kvota2.toFixed(2)}
-                </td>
+            <td class="kvota">
+                ${u.kvotaX.toFixed(2)}
+            </td>
 
-            </tr>
+            <td class="kvota">
+                ${u.kvota2.toFixed(2)}
+            </td>
+
+        </tr>
         `;
     });
 
+
     html += `
-            </tbody>
-        </table>
 
-        </div>
+    </tbody>
 
-        <details class="debug">
-            <summary>
-                Prikaži tekst koji je OCR pročitao
-            </summary>
+    </table>
 
-            <pre>${sigurno(originalniTekst)}</pre>
-        </details>
+    </div>
+
+    <details>
+
+        <summary>
+        Prikaži OCR tekst
+        </summary>
+
+        <pre>
+${sigurno(originalniTekst)}
+        </pre>
+
+    </details>
     `;
 
-    rezultati.innerHTML = html;
+
+    rezultati.innerHTML =
+        html;
 }
 
 
-
-/* ==========================================
-   ZAŠTITA HTML TEKSTA
-========================================== */
+/* ===============================
+   HTML ZAŠTITA
+================================ */
 
 function sigurno(tekst) {
 
@@ -841,4 +825,4 @@ function sigurno(tekst) {
 </script>
 
 </body>
-</html>
+    </html>
