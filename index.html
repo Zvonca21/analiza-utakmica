@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Analiza utakmica</title>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -21,7 +20,7 @@ body {
 }
 
 .container {
-    max-width: 700px;
+    max-width: 750px;
     margin: auto;
     background: white;
     padding: 20px;
@@ -30,7 +29,6 @@ body {
 
 h1 {
     text-align: center;
-    margin-top: 0;
 }
 
 input[type="file"] {
@@ -64,32 +62,50 @@ button:disabled {
     border: 1px solid #ddd;
     border-radius: 10px;
     padding: 15px;
-    margin-top: 15px;
+    margin-bottom: 25px;
+    background: #fafafa;
 }
 
 .match h3 {
     margin-top: 0;
 }
 
+.league {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.teams {
+    font-size: 18px;
+    font-weight: bold;
+}
+
 .odds {
     display: flex;
     justify-content: space-between;
-    margin-top: 10px;
+    margin-top: 12px;
 }
 
 .odd {
-    background: #f1f1f1;
-    padding: 10px;
-    border-radius: 7px;
-    text-align: center;
     width: 31%;
+    padding: 10px;
+    text-align: center;
+    background: #eee;
+    border-radius: 7px;
 }
 
-.analysis {
+.prediction {
     margin-top: 12px;
-    padding: 10px;
+    padding: 12px;
     background: #eef5ff;
     border-radius: 7px;
+    font-weight: bold;
+}
+
+.empty {
+    padding: 15px;
+    background: #fff3cd;
+    border-radius: 8px;
 }
 </style>
 </head>
@@ -100,10 +116,6 @@ button:disabled {
 
 <h1>Analiza nogometnih utakmica</h1>
 
-<p>
-Odaberi jednu ili više fotografija ponude.
-</p>
-
 <input
     type="file"
     id="images"
@@ -112,7 +124,7 @@ Odaberi jednu ili više fotografija ponude.
 >
 
 <button id="analyzeButton" onclick="analyzeImages()">
-    Analiziraj slike
+    Analiziraj utakmice
 </button>
 
 <div id="status">
@@ -125,11 +137,21 @@ Odaberi jednu ili više fotografija ponude.
 
 <script>
 
+const DOZVOLJENA_KVOTA = 1.60;
+
+const REZULTATI = [
+    "2:0",
+    "2:1",
+    "3:0",
+    "3:1",
+    "4:0",
+    "4:1"
+];
+
 async function analyzeImages() {
 
     const files = document.getElementById("images").files;
     const status = document.getElementById("status");
-    const results = document.getElementById("results");
     const button = document.getElementById("analyzeButton");
 
     if (files.length === 0) {
@@ -138,14 +160,17 @@ async function analyzeImages() {
     }
 
     button.disabled = true;
-    results.innerHTML = "";
 
     let completeText = "";
 
     for (let i = 0; i < files.length; i++) {
 
         status.innerHTML =
-            "Čitam sliku " + (i + 1) + " od " + files.length + "...";
+            "Čitam sliku " +
+            (i + 1) +
+            " od " +
+            files.length +
+            "...";
 
         try {
 
@@ -175,71 +200,212 @@ async function analyzeImages() {
 
         } catch (error) {
 
-            completeText +=
-                "\nGreška pri čitanju slike " +
-                (i + 1) +
-                ".";
+            console.log(error);
         }
     }
 
-    status.innerHTML = "Čitanje završeno.";
+    status.innerHTML = "Analiza završena.";
 
-    prikaziTekst(completeText);
+    analizirajUtakmice(completeText);
 
     button.disabled = false;
 }
 
 
-function prikaziTekst(text) {
+function analizirajUtakmice(text) {
 
     const results =
         document.getElementById("results");
 
-    const lines =
-        text
-        .split("\n")
-        .map(x => x.trim())
-        .filter(x => x.length > 0);
+    results.innerHTML = "";
 
-    if (lines.length === 0) {
+    /*
+       Privremeni parser:
+       traži domaću kvotu i utakmicu iz OCR teksta.
+    */
+
+    const lines = text
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+    const utakmice = [];
+
+    for (let i = 0; i < lines.length; i++) {
+
+        const line = lines[i];
+
+        /*
+           Prepoznaj decimalnu kvotu.
+           Primjeri:
+           1.25
+           1.40
+           1.55
+           1.60
+        */
+
+        const odds =
+            line.match(/\b1[.,]\d{1,2}\b/);
+
+        if (!odds) {
+            continue;
+        }
+
+        const domacaKvota =
+            parseFloat(
+                odds[0].replace(",", ".")
+            );
+
+        /*
+           Samo domaće kvote do 1.60.
+        */
+
+        if (domacaKvota > DOZVOLJENA_KVOTA) {
+            continue;
+        }
+
+        /*
+           Pokušaj pronaći naziv utakmice
+           u istoj ili susjednoj liniji.
+        */
+
+        let utakmica = line;
+
+        if (i > 0 && !/\d/.test(lines[i - 1])) {
+            utakmica = lines[i - 1] + " - " + line;
+        }
+
+        /*
+           Određivanje očekivanog rezultata
+           prema redoslijedu dozvoljenih rezultata.
+
+           Kasnije možemo ugraditi precizniji
+           model analize.
+        */
+
+        const rezultat =
+            odrediRezultat(domacaKvota);
+
+        utakmice.push({
+            tekst: utakmica,
+            kvota1: domacaKvota,
+            rezultat: rezultat
+        });
+    }
+
+    /*
+       Sortiranje:
+       2:0
+       2:1
+       3:0
+       3:1
+       4:0
+       4:1
+    */
+
+    utakmice.sort((a, b) => {
+
+        return (
+            REZULTATI.indexOf(a.rezultat) -
+            REZULTATI.indexOf(b.rezultat)
+        );
+    });
+
+    prikaziUtakmice(utakmice);
+}
+
+
+function odrediRezultat(kvota) {
+
+    if (kvota <= 1.30) {
+        return "2:0";
+    }
+
+    if (kvota <= 1.40) {
+        return "2:1";
+    }
+
+    if (kvota <= 1.45) {
+        return "3:0";
+    }
+
+    if (kvota <= 1.50) {
+        return "3:1";
+    }
+
+    if (kvota <= 1.55) {
+        return "4:0";
+    }
+
+    return "4:1";
+}
+
+
+function prikaziUtakmice(utakmice) {
+
+    const results =
+        document.getElementById("results");
+
+    if (utakmice.length === 0) {
 
         results.innerHTML =
-            "<p>Nije pronađen tekst na slikama.</p>";
+            '<div class="empty">' +
+            'Nije pronađena utakmica s domaćom kvotom do 1.60.' +
+            '</div>';
 
         return;
     }
-
-    results.innerHTML = "";
 
     const naslov =
         document.createElement("h2");
 
     naslov.innerText =
-        "Prepoznati podaci";
+        "Odabrane utakmice";
 
     results.appendChild(naslov);
 
-    const textBox =
-        document.createElement("div");
+    utakmice.forEach((utakmica, index) => {
 
-    textBox.className = "match";
+        const div =
+            document.createElement("div");
 
-    textBox.innerText =
-        lines.join("\n");
+        div.className = "match";
 
-    results.appendChild(textBox);
+        div.innerHTML = `
 
-    const info =
-        document.createElement("div");
+            <h3>Utakmica ${index + 1}</h3>
 
-    info.className = "analysis";
+            <div class="teams">
+                ${utakmica.tekst}
+            </div>
 
-    info.innerHTML =
-        "<strong>Sljedeći korak:</strong><br>" +
-        "Ovaj tekst ćemo zatim pretvoriti u utakmice " +
-        "s domaćinom, gostom, ligom i koeficijentima 1-X-2.";
+            <div class="odds">
 
-    results.appendChild(info);
+                <div class="odd">
+                    <strong>1</strong><br>
+                    ${utakmica.kvota1.toFixed(2)}
+                </div>
+
+                <div class="odd">
+                    <strong>X</strong><br>
+                    -
+                </div>
+
+                <div class="odd">
+                    <strong>2</strong><br>
+                    -
+                </div>
+
+            </div>
+
+            <div class="prediction">
+                Predviđeni rezultat:
+                ${utakmica.rezultat}
+            </div>
+        `;
+
+        results.appendChild(div);
+    });
 }
 
 </script>
