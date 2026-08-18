@@ -3,35 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analiza utakmica</title>
+
+<title>Analiza nogometnih utakmica</title>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
-* {
-    box-sizing: border-box;
-}
-
 body {
+    font-family: Arial, sans-serif;
+    background: #f2f2f2;
     margin: 0;
     padding: 15px;
-    font-family: Arial, sans-serif;
-    background: #f1f3f5;
 }
 
 .container {
-    max-width: 750px;
+    max-width: 800px;
     margin: auto;
     background: white;
     padding: 20px;
-    border-radius: 14px;
+    border-radius: 12px;
 }
 
 h1 {
     text-align: center;
 }
 
-input[type="file"] {
+input {
     width: 100%;
     margin: 15px 0;
 }
@@ -39,35 +36,26 @@ input[type="file"] {
 button {
     width: 100%;
     padding: 14px;
-    margin: 7px 0;
-    border: 0;
-    border-radius: 8px;
     background: #222;
     color: white;
+    border: 0;
+    border-radius: 8px;
     font-size: 16px;
-}
-
-button:disabled {
-    background: #999;
 }
 
 #status {
     margin: 15px 0;
-    padding: 12px;
+    padding: 10px;
     background: #eee;
     border-radius: 8px;
 }
 
 .match {
+    background: #fafafa;
     border: 1px solid #ddd;
     border-radius: 10px;
     padding: 15px;
-    margin-bottom: 25px;
-    background: #fafafa;
-}
-
-.match h3 {
-    margin-top: 0;
+    margin-bottom: 30px;
 }
 
 .league {
@@ -78,32 +66,32 @@ button:disabled {
 .teams {
     font-size: 18px;
     font-weight: bold;
+    margin-bottom: 12px;
 }
 
 .odds {
     display: flex;
-    justify-content: space-between;
-    margin-top: 12px;
+    gap: 8px;
 }
 
 .odd {
-    width: 31%;
+    flex: 1;
+    background: #eee;
     padding: 10px;
     text-align: center;
-    background: #eee;
-    border-radius: 7px;
+    border-radius: 6px;
 }
 
-.prediction {
+.result {
     margin-top: 12px;
-    padding: 12px;
-    background: #eef5ff;
-    border-radius: 7px;
+    padding: 10px;
     font-weight: bold;
+    background: #e9f3ff;
+    border-radius: 6px;
 }
 
-.empty {
-    padding: 15px;
+.warning {
+    padding: 12px;
     background: #fff3cd;
     border-radius: 8px;
 }
@@ -116,6 +104,10 @@ button:disabled {
 
 <h1>Analiza nogometnih utakmica</h1>
 
+<p>
+Odaberi jednu ili više slika s ponudom.
+</p>
+
 <input
     type="file"
     id="images"
@@ -123,23 +115,23 @@ button:disabled {
     multiple
 >
 
-<button id="analyzeButton" onclick="analyzeImages()">
-    Analiziraj utakmice
+<button onclick="pokreniAnalizu()">
+    ANALIZIRAJ UTAKMICE
 </button>
 
 <div id="status">
     Spremno.
 </div>
 
-<div id="results"></div>
+<div id="rezultati"></div>
 
 </div>
 
 <script>
 
-const DOZVOLJENA_KVOTA = 1.60;
+const MAX_KVOTA_DOMACIN = 1.60;
 
-const REZULTATI = [
+const REDOSLIJED_REZULTATA = [
     "2:0",
     "2:1",
     "3:0",
@@ -148,210 +140,312 @@ const REZULTATI = [
     "4:1"
 ];
 
-async function analyzeImages() {
+async function pokreniAnalizu() {
 
-    const files = document.getElementById("images").files;
+    const slike = document.getElementById("images").files;
     const status = document.getElementById("status");
-    const button = document.getElementById("analyzeButton");
+    const rezultati = document.getElementById("rezultati");
 
-    if (files.length === 0) {
-        status.innerHTML = "Prvo odaberi jednu ili više slika.";
+    if (slike.length === 0) {
+        status.innerHTML = "Odaberi barem jednu sliku.";
         return;
     }
 
-    button.disabled = true;
+    rezultati.innerHTML = "";
 
-    let completeText = "";
+    let tekst = "";
 
-    for (let i = 0; i < files.length; i++) {
+    for (let i = 0; i < slike.length; i++) {
 
         status.innerHTML =
             "Čitam sliku " +
             (i + 1) +
             " od " +
-            files.length +
+            slike.length +
             "...";
 
         try {
 
-            const result = await Tesseract.recognize(
-                files[i],
-                "eng",
-                {
-                    logger: info => {
-
-                        if (info.status === "recognizing text") {
-
-                            const progress =
-                                Math.round(info.progress * 100);
-
-                            status.innerHTML =
-                                "Čitanje slike " +
-                                (i + 1) +
-                                ": " +
-                                progress +
-                                "%";
-                        }
-                    }
-                }
+            const rezultat = await Tesseract.recognize(
+                slike[i],
+                "eng"
             );
 
-            completeText += "\n" + result.data.text;
+            tekst += "\n" + rezultat.data.text;
 
-        } catch (error) {
+        } catch (greska) {
 
-            console.log(error);
+            console.log(greska);
+
         }
     }
 
-    status.innerHTML = "Analiza završena.";
+    status.innerHTML = "Čitanje završeno.";
 
-    analizirajUtakmice(completeText);
-
-    button.disabled = false;
+    obradiTekst(tekst);
 }
 
 
-function analizirajUtakmice(text) {
+/*
+==================================================
+PREPOZNAVANJE UTAKMICA
+==================================================
+*/
 
-    const results =
-        document.getElementById("results");
+function obradiTekst(tekst) {
 
-    results.innerHTML = "";
-
-    /*
-       Privremeni parser:
-       traži domaću kvotu i utakmicu iz OCR teksta.
-    */
-
-    const lines = text
+    const redovi = tekst
         .split("\n")
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
+        .map(x => x.trim())
+        .filter(x => x.length > 0);
 
     const utakmice = [];
 
-    for (let i = 0; i < lines.length; i++) {
+    for (let i = 0; i < redovi.length; i++) {
 
-        const line = lines[i];
+        const red = redovi[i];
 
         /*
-           Prepoznaj decimalnu kvotu.
-           Primjeri:
-           1.25
-           1.40
-           1.55
-           1.60
+        Tražimo tri decimalna broja koja
+        predstavljaju 1 X 2.
         */
 
-        const odds =
-            line.match(/\b1[.,]\d{1,2}\b/);
+        const brojevi =
+            red.match(/\b\d+[.,]\d{1,2}\b/g);
 
-        if (!odds) {
+        if (!brojevi || brojevi.length < 3) {
             continue;
         }
 
-        const domacaKvota =
+        const kvota1 =
             parseFloat(
-                odds[0].replace(",", ".")
+                brojevi[0].replace(",", ".")
+            );
+
+        const kvotaX =
+            parseFloat(
+                brojevi[1].replace(",", ".")
+            );
+
+        const kvota2 =
+            parseFloat(
+                brojevi[2].replace(",", ".")
             );
 
         /*
-           Samo domaće kvote do 1.60.
+        GLAVNI FILTER
+
+        Domaća kvota mora biti
+        1.60 ili manja.
         */
 
-        if (domacaKvota > DOZVOLJENA_KVOTA) {
+        if (kvota1 > MAX_KVOTA_DOMACIN) {
             continue;
         }
 
         /*
-           Pokušaj pronaći naziv utakmice
-           u istoj ili susjednoj liniji.
+        Pokušaj pronalaska naziva utakmice
+        iz prethodnog retka.
         */
 
-        let utakmica = line;
+        let naziv = "";
 
-        if (i > 0 && !/\d/.test(lines[i - 1])) {
-            utakmica = lines[i - 1] + " - " + line;
+        if (i > 0) {
+            naziv = redovi[i - 1];
         }
 
         /*
-           Određivanje očekivanog rezultata
-           prema redoslijedu dozvoljenih rezultata.
+        Liga se pokušava uzeti iz retka
+        prije naziva utakmice.
+        */
 
-           Kasnije možemo ugraditi precizniji
-           model analize.
+        let liga = "";
+
+        if (i > 1) {
+            liga = redovi[i - 2];
+        }
+
+        /*
+        Razdvajanje domaćina i gosta.
+        */
+
+        let domacin = "";
+        let gost = "";
+
+        if (naziv.includes(" - ")) {
+
+            const dijelovi =
+                naziv.split(" - ");
+
+            domacin = dijelovi[0].trim();
+            gost = dijelovi[1].trim();
+
+        } else if (naziv.includes(" vs ")) {
+
+            const dijelovi =
+                naziv.split(" vs ");
+
+            domacin = dijelovi[0].trim();
+            gost = dijelovi[1].trim();
+
+        } else {
+
+            const dijelovi =
+                naziv.split(" ");
+
+            if (dijelovi.length >= 2) {
+
+                const sredina =
+                    Math.floor(dijelovi.length / 2);
+
+                domacin =
+                    dijelovi
+                    .slice(0, sredina)
+                    .join(" ");
+
+                gost =
+                    dijelovi
+                    .slice(sredina)
+                    .join(" ");
+            }
+        }
+
+        /*
+        Procjena mogućeg rezultata.
+
+        Važno:
+        Ovo nije tvrdnja da kvota garantira
+        rezultat. Rezultat je procjena.
         */
 
         const rezultat =
-            odrediRezultat(domacaKvota);
+            procijeniRezultat(
+                kvota1,
+                kvotaX,
+                kvota2
+            );
 
         utakmice.push({
-            tekst: utakmica,
-            kvota1: domacaKvota,
+
+            liga: liga,
+
+            domacin: domacin,
+
+            gost: gost,
+
+            kvota1: kvota1,
+
+            kvotaX: kvotaX,
+
+            kvota2: kvota2,
+
             rezultat: rezultat
         });
     }
 
     /*
-       Sortiranje:
-       2:0
-       2:1
-       3:0
-       3:1
-       4:0
-       4:1
+    SORTIRANJE
+
+    2:0
+    2:1
+    3:0
+    3:1
+    4:0
+    4:1
     */
 
     utakmice.sort((a, b) => {
 
-        return (
-            REZULTATI.indexOf(a.rezultat) -
-            REZULTATI.indexOf(b.rezultat)
+        return REDOSLIJED_REZULTATA.indexOf(
+            a.rezultat
+        )
+        -
+        REDOSLIJED_REZULTATA.indexOf(
+            b.rezultat
         );
+
     });
 
     prikaziUtakmice(utakmice);
 }
 
 
-function odrediRezultat(kvota) {
+/*
+==================================================
+PROCJENA REZULTATA
+==================================================
+*/
 
-    if (kvota <= 1.30) {
-        return "2:0";
+function procijeniRezultat(k1, kx, k2) {
+
+    /*
+    Normalizirane vjerojatnosti.
+    */
+
+    const p1 = 1 / k1;
+    const px = 1 / kx;
+    const p2 = 1 / k2;
+
+    const ukupno = p1 + px + p2;
+
+    const domacin =
+        p1 / ukupno;
+
+    const gost =
+        p2 / ukupno;
+
+    /*
+    Jačina domaćeg favorita.
+
+    Ovo koristi samo za procjenu
+    među šest dopuštenih rezultata.
+    */
+
+    if (domacin >= 0.72) {
+        return "4:0";
     }
 
-    if (kvota <= 1.40) {
-        return "2:1";
-    }
-
-    if (kvota <= 1.45) {
+    if (domacin >= 0.68) {
         return "3:0";
     }
 
-    if (kvota <= 1.50) {
+    if (domacin >= 0.64) {
         return "3:1";
     }
 
-    if (kvota <= 1.55) {
-        return "4:0";
+    if (domacin >= 0.60) {
+        return "2:0";
+    }
+
+    if (domacin >= 0.55) {
+        return "2:1";
     }
 
     return "4:1";
 }
 
 
+/*
+==================================================
+PRIKAZ
+==================================================
+*/
+
 function prikaziUtakmice(utakmice) {
 
-    const results =
-        document.getElementById("results");
+    const rezultati =
+        document.getElementById("rezultati");
+
+    rezultati.innerHTML = "";
 
     if (utakmice.length === 0) {
 
-        results.innerHTML =
-            '<div class="empty">' +
-            'Nije pronađena utakmica s domaćom kvotom do 1.60.' +
-            '</div>';
+        rezultati.innerHTML = `
+            <div class="warning">
+                Nema utakmica koje zadovoljavaju
+                uvjet domaće kvote ≤ 1.60.
+            </div>
+        `;
 
         return;
     }
@@ -362,9 +456,9 @@ function prikaziUtakmice(utakmice) {
     naslov.innerText =
         "Odabrane utakmice";
 
-    results.appendChild(naslov);
+    rezultati.appendChild(naslov);
 
-    utakmice.forEach((utakmica, index) => {
+    utakmice.forEach((utakmica, indeks) => {
 
         const div =
             document.createElement("div");
@@ -373,10 +467,14 @@ function prikaziUtakmice(utakmice) {
 
         div.innerHTML = `
 
-            <h3>Utakmica ${index + 1}</h3>
+            <div class="league">
+                Liga: ${sigurno(utakmica.liga)}
+            </div>
 
             <div class="teams">
-                ${utakmica.tekst}
+                ${sigurno(utakmica.domacin)}
+                -
+                ${sigurno(utakmica.gost)}
             </div>
 
             <div class="odds">
@@ -388,24 +486,37 @@ function prikaziUtakmice(utakmice) {
 
                 <div class="odd">
                     <strong>X</strong><br>
-                    -
+                    ${utakmica.kvotaX.toFixed(2)}
                 </div>
 
                 <div class="odd">
                     <strong>2</strong><br>
-                    -
+                    ${utakmica.kvota2.toFixed(2)}
                 </div>
 
             </div>
 
-            <div class="prediction">
+            <div class="result">
                 Predviđeni rezultat:
                 ${utakmica.rezultat}
             </div>
         `;
 
-        results.appendChild(div);
+        rezultati.appendChild(div);
     });
+}
+
+
+/*
+Zaštita prikaza teksta.
+*/
+
+function sigurno(tekst) {
+
+    return String(tekst || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 }
 
 </script>
