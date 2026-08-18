@@ -27,20 +27,17 @@ body {
 h1 {
     text-align: center;
     font-size: 24px;
-    margin-bottom: 10px;
 }
 
 .opis {
     text-align: center;
     color: #555;
-    font-size: 14px;
     margin-bottom: 20px;
 }
 
 input[type="file"] {
     width: 100%;
     margin: 15px 0;
-    font-size: 16px;
 }
 
 button {
@@ -52,30 +49,23 @@ button {
     border-radius: 8px;
     background: #1976d2;
     color: white;
-    cursor: pointer;
-    margin-bottom: 10px;
 }
 
 button:disabled {
     background: #999;
-    cursor: not-allowed;
 }
 
 #status {
     margin: 15px 0;
-    padding: 10px;
-    background: #eeeeee;
+    padding: 12px;
+    background: #eee;
     border-radius: 8px;
     text-align: center;
     font-weight: bold;
 }
 
-#rezultati {
-    margin-top: 20px;
-}
-
 .grupa {
-    margin-top: 25px;
+    margin-top: 24px;
 }
 
 .grupa h2 {
@@ -83,43 +73,38 @@ button:disabled {
     color: white;
     padding: 10px;
     border-radius: 8px;
-    font-size: 19px;
 }
 
 .utakmica {
     border: 1px solid #ddd;
     border-radius: 8px;
     padding: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 18px;
     background: #fafafa;
 }
 
-.utakmica .par {
+.par {
     font-size: 18px;
     font-weight: bold;
-    margin-bottom: 6px;
 }
 
-.utakmica .liga {
-    font-size: 14px;
+.liga {
+    margin-top: 6px;
     color: #555;
-    margin-bottom: 8px;
 }
 
 .kvote {
-    font-size: 15px;
-    line-height: 1.6;
+    margin-top: 10px;
 }
 
 .tip {
-    margin-top: 7px;
+    margin-top: 8px;
     font-weight: bold;
-    font-size: 16px;
 }
 
 .nema {
-    text-align: center;
     padding: 20px;
+    text-align: center;
     background: #fff3cd;
     border-radius: 8px;
 }
@@ -133,26 +118,17 @@ button:disabled {
 <h1>Analiza nogometnih utakmica</h1>
 
 <div class="opis">
-Odaberi jednu ili više slika ponude utakmica.
-Program izdvaja utakmice s tipovima
-2:0, 2:1, 3:0, 3:1, 4:0 i 4:1
-kod kojih je kvota na domaćina najviše 1.60.
+Izdvaja tipove 2:0, 2:1, 3:0, 3:1, 4:0 i 4:1
+uz kvotu domaćina do 1.60.
 </div>
 
-<input
-    type="file"
-    id="slike"
-    accept="image/*"
-    multiple
->
+<input type="file" id="slike" accept="image/*" multiple>
 
 <button id="analiziraj" onclick="analizirajSlike()">
 Analiziraj slike
 </button>
 
-<div id="status">
-Spremno za analizu.
-</div>
+<div id="status">Spremno.</div>
 
 <div id="rezultati"></div>
 
@@ -178,13 +154,7 @@ const redoslijedTipova = {
     "4:1": 6
 };
 
-
-/* --------------------------------------------------
-   ČIŠĆENJE OCR TEKSTA
--------------------------------------------------- */
-
-function ocistiTekst(text) {
-
+function normalizirajTekst(text) {
     return text
         .replace(/\r/g, "")
         .replace(/[|]/g, " ")
@@ -193,44 +163,38 @@ function ocistiTekst(text) {
         .trim();
 }
 
+function imaVrijeme(red) {
+    return /\b([01]?\d|2[0-3]):[0-5]\d\b/.test(red);
+}
 
-/* --------------------------------------------------
-   PREPOZNAVANJE KVOTE
--------------------------------------------------- */
+function izvuciVrijeme(red) {
+    const m = red.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/);
+    return m ? m[0] : "";
+}
 
-function procitajBroj(text) {
+function procitajBroj(t) {
 
-    if (!text) return null;
+    if (!t) return null;
 
-    text = text
+    let s = t
         .replace(",", ".")
         .replace(/[Oo]/g, "0")
         .replace(/[Il]/g, "1");
 
-    const broj = parseFloat(text);
+    const n = parseFloat(s);
 
-    if (isNaN(broj)) {
-        return null;
-    }
-
-    return broj;
+    return isNaN(n) ? null : n;
 }
-
-
-/* --------------------------------------------------
-   PREPOZNAVANJE TOČNOG REZULTATA
--------------------------------------------------- */
 
 function pronadjiTip(red) {
 
-    let normalizirano = red
+    const r = red
         .replace(/\s/g, "")
-        .replace(/;/g, ":")
-        .replace(/-/g, ":");
+        .replace(/-/g, ":")
+        .replace(/;/g, ":");
 
     for (const tip of dozvoljeniTipovi) {
-
-        if (normalizirano.includes(tip)) {
+        if (r.includes(tip)) {
             return tip;
         }
     }
@@ -238,111 +202,9 @@ function pronadjiTip(red) {
     return null;
 }
 
-
-/* --------------------------------------------------
-   PROVJERA JE LI RED VJEROJATNO LIGA
--------------------------------------------------- */
-
-function jeLiga(red) {
-
-    if (!red) return false;
-
-    const r = red.trim();
-
-    if (r.length < 3) return false;
-
-    /*
-       Red koji sadrži više kvota nije liga
-    */
-
-    const brojevi = r.match(/\b\d+[.,]\d+\b/g);
-
-    if (brojevi && brojevi.length >= 2) {
-        return false;
-    }
-
-    /*
-       Red s točnim rezultatom nije liga
-    */
-
-    if (
-        /(?:2|3|4)\s*[:\-]\s*[01]/.test(r)
-    ) {
-        return false;
-    }
-
-    /*
-       Uobičajene riječi koje se pojavljuju
-       u nazivima natjecanja
-    */
-
-    const rijeciLiga = [
-        "league",
-        "liga",
-        "premier",
-        "division",
-        "divizija",
-        "cup",
-        "kup",
-        "championship",
-        "bundesliga",
-        "serie",
-        "ligue",
-        "superliga",
-        "super league",
-        "prva liga",
-        "first league",
-        "segunda",
-        "primera",
-        "national",
-        "regional",
-        "women",
-        "femmes",
-        "reserve",
-        "u19",
-        "u20",
-        "u21",
-        "u23"
-    ];
-
-    const malo = r.toLowerCase();
-
-    if (
-        rijeciLiga.some(x => malo.includes(x))
-    ) {
-        return true;
-    }
-
-    /*
-       Ako nema kvota i red nije predugačak,
-       može biti naziv države / natjecanja.
-    */
-
-    if (
-        (!brojevi || brojevi.length === 0) &&
-        r.length <= 55 &&
-        !/\d{1,2}:\d{2}/.test(r)
-    ) {
-
-        const rijeci = r.split(" ");
-
-        if (rijeci.length <= 7) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-
-/* --------------------------------------------------
-   TRAŽENJE KVOTA 1 X 2
--------------------------------------------------- */
-
 function izvuciKvote(red) {
 
-    const matches =
-        red.match(/\b\d{1,2}[.,]\d{1,2}\b/g);
+    const matches = red.match(/\b\d{1,2}[.,]\d{1,2}\b/g);
 
     if (!matches || matches.length < 3) {
         return null;
@@ -357,8 +219,7 @@ function izvuciKvote(red) {
     }
 
     /*
-       Zadnje tri decimalne vrijednosti u redu
-       uzimamo kao 1 X 2.
+      Uzimamo zadnje tri realne decimalne kvote.
     */
 
     return {
@@ -368,46 +229,99 @@ function izvuciKvote(red) {
     };
 }
 
+function jeZaglavlje(red) {
 
-/* --------------------------------------------------
-   UKLANJANJE KVOTA I TIPA IZ NAZIVA PARA
--------------------------------------------------- */
+    const r = red.toLowerCase();
 
-function izvuciNazivPara(red) {
+    const zabranjeno = [
+        "1 x 2",
+        "1x2",
+        "tp",
+        "more",
+        "manje",
+        "više",
+        "kvota",
+        "odds",
+        "točan rezultat",
+        "correct score"
+    ];
 
-    let naziv = red;
+    if (zabranjeno.some(x => r === x || r.includes(x))) {
+        return true;
+    }
 
-    naziv = naziv.replace(
-        /\b\d{1,2}[.,]\d{1,2}\b/g,
-        " "
-    );
-
-    naziv = naziv.replace(
-        /\b[234]\s*[:\-]\s*[01]\b/g,
-        " "
-    );
-
-    naziv = naziv.replace(
-        /\b1\s+[xX]\s+2\b/g,
-        " "
-    );
-
-    naziv = naziv.replace(
-        / +/g,
-        " "
-    );
-
-    return naziv.trim();
+    return false;
 }
 
+function izgledaKaoLiga(red) {
 
-/* --------------------------------------------------
-   RAZDVAJANJE DOMAĆINA I GOSTA
--------------------------------------------------- */
+    if (!red) return false;
 
-function podijeliPar(naziv) {
+    if (imaVrijeme(red)) return false;
 
-    let separatori = [
+    if (izvuciKvote(red)) return false;
+
+    if (pronadjiTip(red)) return false;
+
+    if (jeZaglavlje(red)) return false;
+
+    const r = red.trim();
+
+    if (r.length < 3 || r.length > 80) {
+        return false;
+    }
+
+    const poznateRijeci = [
+        "liga",
+        "league",
+        "premier",
+        "primera",
+        "segunda",
+        "serie",
+        "bundesliga",
+        "ligue",
+        "division",
+        "superliga",
+        "super league",
+        "championship",
+        "cup",
+        "kup",
+        "women",
+        "reserve",
+        "u19",
+        "u20",
+        "u21",
+        "u23"
+    ];
+
+    const malo = r.toLowerCase();
+
+    if (poznateRijeci.some(x => malo.includes(x))) {
+        return true;
+    }
+
+    return false;
+}
+
+function ocistiNazivParova(red) {
+
+    return red
+        .replace(/\b([01]?\d|2[0-3]):[0-5]\d\b/g, " ")
+        .replace(/\b\d{1,2}[.,]\d{1,2}\b/g, " ")
+        .replace(/\b[234]\s*[:\-]\s*[01]\b/g, " ")
+        .replace(/\b1\s*[xX]\s*2\b/g, " ")
+        .replace(/\bTP\b/gi, " ")
+        .replace(/\bMore\b/gi, " ")
+        .replace(/\bLess\b/gi, " ")
+        .replace(/\bUnder\b/gi, " ")
+        .replace(/\bOver\b/gi, " ")
+        .replace(/ +/g, " ")
+        .trim();
+}
+
+function razdvojiPar(naziv) {
+
+    const separatori = [
         " - ",
         " – ",
         " — ",
@@ -420,20 +334,13 @@ function podijeliPar(naziv) {
 
         if (naziv.includes(sep)) {
 
-            const dijelovi =
-                naziv.split(sep);
+            const dijelovi = naziv.split(sep);
 
             if (dijelovi.length >= 2) {
 
                 return {
-                    domacin:
-                        dijelovi[0].trim(),
-
-                    gost:
-                        dijelovi
-                        .slice(1)
-                        .join(sep)
-                        .trim()
+                    domacin: dijelovi[0].trim(),
+                    gost: dijelovi.slice(1).join(sep).trim()
                 };
             }
         }
@@ -445,343 +352,235 @@ function podijeliPar(naziv) {
     };
 }
 
+function podijeliNaUtakmice(redovi) {
 
-/* --------------------------------------------------
-   PARSIRANJE OCR TEKSTA
--------------------------------------------------- */
+    const blokovi = [];
+    let trenutni = [];
+
+    for (const red of redovi) {
+
+        if (imaVrijeme(red)) {
+
+            if (trenutni.length > 0) {
+                blokovi.push(trenutni);
+            }
+
+            trenutni = [red];
+
+        } else {
+
+            if (trenutni.length > 0) {
+                trenutni.push(red);
+            }
+        }
+    }
+
+    if (trenutni.length > 0) {
+        blokovi.push(trenutni);
+    }
+
+    return blokovi;
+}
+
+function pronadjiLiguIspred(redovi, indeksPocetka) {
+
+    for (let i = indeksPocetka - 1; i >= 0; i--) {
+
+        const red = redovi[i];
+
+        if (izgledaKaoLiga(red)) {
+            return red;
+        }
+
+        if (imaVrijeme(red)) {
+            break;
+        }
+    }
+
+    return "Nepoznata liga";
+}
 
 function obradiTekst(text) {
 
-    const tekst = ocistiTekst(text);
+    const tekst = normalizirajTekst(text);
 
     const redovi = tekst
         .split("\n")
         .map(x => x.trim())
         .filter(Boolean);
 
+    const utakmice = [];
+
     let trenutnaLiga = "Nepoznata liga";
 
-    let utakmice = [];
-
-    for (
-        let i = 0;
-        i < redovi.length;
-        i++
-    ) {
+    for (let i = 0; i < redovi.length; i++) {
 
         const red = redovi[i];
 
-        /*
-           VAŽNO:
-           Liga se ažurira samo kada naiđemo
-           na red koji izgleda kao naslov lige.
-           Sve sljedeće utakmice dobivaju upravo
-           tu ligu dok se ne pojavi nova.
-        */
-
-        if (jeLiga(red)) {
-
-            /*
-               Ne prihvaćamo red kao ligu ako
-               odmah izgleda kao utakmica.
-            */
-
-            const kvoteTest =
-                izvuciKvote(red);
-
-            const tipTest =
-                pronadjiTip(red);
-
-            if (
-                !kvoteTest &&
-                !tipTest
-            ) {
-
-                trenutnaLiga = red;
-                continue;
-            }
+        if (izgledaKaoLiga(red)) {
+            trenutnaLiga = red;
+            continue;
         }
 
-
-        let kombiniraniRed = red;
-
-        /*
-           Ako su naziv utakmice i kvote
-           razdvojeni u dva OCR reda,
-           pokušavamo ih spojiti.
-        */
-
-        let kvote =
-            izvuciKvote(kombiniraniRed);
-
-        let tip =
-            pronadjiTip(kombiniraniRed);
-
-
-        if (
-            (!kvote || !tip) &&
-            i + 1 < redovi.length
-        ) {
-
-            const sljedeci =
-                redovi[i + 1];
-
-            const spojeni =
-                red + " " + sljedeci;
-
-            const kvoteSpojene =
-                izvuciKvote(spojeni);
-
-            const tipSpojen =
-                pronadjiTip(spojeni);
-
-            if (
-                kvoteSpojene &&
-                tipSpojen
-            ) {
-
-                kombiniraniRed = spojeni;
-
-                kvote =
-                    kvoteSpojene;
-
-                tip =
-                    tipSpojen;
-
-                i++;
-            }
+        if (!imaVrijeme(red)) {
+            continue;
         }
 
+        let blok = red;
+
+        /*
+          Dodajemo samo retke dok ne naiđemo na NOVO vrijeme.
+          Tako dvije utakmice više ne mogu biti spojene.
+        */
+
+        let j = i + 1;
+
+        while (j < redovi.length && !imaVrijeme(redovi[j])) {
+
+            if (izgledaKaoLiga(redovi[j])) {
+                break;
+            }
+
+            blok += " " + redovi[j];
+            j++;
+        }
+
+        const kvote = izvuciKvote(blok);
+        const tip = pronadjiTip(blok);
 
         if (!kvote || !tip) {
             continue;
         }
 
-
-        /*
-           Filtriranje dozvoljenih rezultata
-        */
-
-        if (
-            !dozvoljeniTipovi.includes(tip)
-        ) {
+        if (!dozvoljeniTipovi.includes(tip)) {
             continue;
         }
 
-
-        /*
-           Kvota na domaćina smije biti
-           maksimalno 1.60
-        */
-
-        if (
-            kvote.jedan > 1.60
-        ) {
+        if (kvote.jedan > 1.60) {
             continue;
         }
-
-
-        /*
-           Zaštita od OCR greške
-        */
 
         if (
             kvote.jedan < 1.01 ||
-            kvote.jedan > 100 ||
             kvote.x < 1 ||
             kvote.dva < 1
         ) {
             continue;
         }
 
+        let naziv = ocistiNazivParova(blok);
 
-        const naziv =
-            izvuciNazivPara(
-                kombiniraniRed
-            );
+        /*
+          Ako je OCR ubacio dodatne tekstove nakon para,
+          pokušavamo ih odstraniti.
+        */
 
-        const par =
-            podijeliPar(naziv);
+        naziv = naziv
+            .replace(/\b\d+\s*More\b/gi, "")
+            .replace(/\bMore\b/gi, "")
+            .trim();
 
+        const par = razdvojiPar(naziv);
 
         utakmice.push({
-
-            liga:
-                trenutnaLiga,
-
-            domacin:
-                par.domacin,
-
-            gost:
-                par.gost,
-
-            jedan:
-                kvote.jedan,
-
-            x:
-                kvote.x,
-
-            dva:
-                kvote.dva,
-
-            tip:
-                tip
+            liga: trenutnaLiga,
+            vrijeme: izvuciVrijeme(red),
+            domacin: par.domacin,
+            gost: par.gost,
+            jedan: kvote.jedan,
+            x: kvote.x,
+            dva: kvote.dva,
+            tip: tip
         });
     }
 
     return utakmice;
 }
 
-
-/* --------------------------------------------------
-   SORTIRANJE
--------------------------------------------------- */
-
-function sortirajUtakmice(utakmice) {
-
-    return utakmice.sort(
-        (a, b) => {
-
-            const tipA =
-                redoslijedTipova[a.tip] || 99;
-
-            const tipB =
-                redoslijedTipova[b.tip] || 99;
-
-            if (tipA !== tipB) {
-                return tipA - tipB;
-            }
-
-            return (
-                a.jedan -
-                b.jedan
-            );
-        }
-    );
-}
-
-
-/* --------------------------------------------------
-   UKLANJANJE DUPLIKATA
--------------------------------------------------- */
-
 function ukloniDuplikate(lista) {
 
-    const vidjeno =
-        new Set();
+    const set = new Set();
 
     return lista.filter(u => {
 
-        const kljuc = [
+        const key = [
             u.liga,
+            u.vrijeme,
             u.domacin,
             u.gost,
-            u.jedan,
-            u.tip
-        ]
-        .join("|")
-        .toLowerCase();
+            u.tip,
+            u.jedan
+        ].join("|").toLowerCase();
 
-        if (
-            vidjeno.has(kljuc)
-        ) {
+        if (set.has(key)) {
             return false;
         }
 
-        vidjeno.add(kljuc);
-
+        set.add(key);
         return true;
     });
 }
 
+function sortiraj(lista) {
 
-/* --------------------------------------------------
-   PRIKAZ REZULTATA
--------------------------------------------------- */
+    return lista.sort((a, b) => {
 
-function prikaziRezultate(utakmice) {
+        const ta = redoslijedTipova[a.tip] || 99;
+        const tb = redoslijedTipova[b.tip] || 99;
 
-    const container =
-        document.getElementById(
-            "rezultati"
-        );
+        if (ta !== tb) {
+            return ta - tb;
+        }
+
+        return a.jedan - b.jedan;
+    });
+}
+
+function prikaziRezultate(lista) {
+
+    const container = document.getElementById("rezultati");
 
     container.innerHTML = "";
 
-    if (
-        utakmice.length === 0
-    ) {
+    if (lista.length === 0) {
 
         container.innerHTML = `
             <div class="nema">
-                Nema pronađenih utakmica
-                koje zadovoljavaju uvjete.
+                Nema pronađenih utakmica koje zadovoljavaju uvjete.
             </div>
         `;
 
         return;
     }
 
+    for (const tip of dozvoljeniTipovi) {
 
-    for (
-        const tip of dozvoljeniTipovi
-    ) {
+        const grupa = lista.filter(u => u.tip === tip);
 
-        const grupa =
-            utakmice.filter(
-                u => u.tip === tip
-            );
-
-        if (
-            grupa.length === 0
-        ) {
+        if (grupa.length === 0) {
             continue;
         }
 
+        const box = document.createElement("div");
+        box.className = "grupa";
 
-        const divGrupa =
-            document.createElement(
-                "div"
-            );
+        const h2 = document.createElement("h2");
+        h2.textContent = "Tip " + tip;
 
-        divGrupa.className =
-            "grupa";
+        box.appendChild(h2);
 
+        for (const u of grupa) {
 
-        const naslov =
-            document.createElement(
-                "h2"
-            );
+            const div = document.createElement("div");
+            div.className = "utakmica";
 
-        naslov.textContent =
-            "Tip " + tip;
-
-        divGrupa.appendChild(
-            naslov
-        );
-
-
-        grupa.forEach(u => {
-
-            const div =
-                document.createElement(
-                    "div"
-                );
-
-            div.className =
-                "utakmica";
-
-
-            const nazivPara =
-                u.gost
+            const naziv = u.gost
                 ? `${u.domacin} - ${u.gost}`
                 : u.domacin;
 
-
             div.innerHTML = `
-
                 <div class="par">
-                    ${nazivPara}
+                    ${u.vrijeme ? u.vrijeme + " " : ""}${naziv}
                 </div>
 
                 <div class="liga">
@@ -789,22 +588,11 @@ function prikaziRezultate(utakmice) {
                 </div>
 
                 <div class="kvote">
-
-                    1:
-                    <strong>
-                    ${u.jedan.toFixed(2)}
-                    </strong>
-
+                    1: <strong>${u.jedan.toFixed(2)}</strong>
                     &nbsp;&nbsp;
-
-                    X:
-                    ${u.x.toFixed(2)}
-
+                    X: ${u.x.toFixed(2)}
                     &nbsp;&nbsp;
-
-                    2:
-                    ${u.dva.toFixed(2)}
-
+                    2: ${u.dva.toFixed(2)}
                 </div>
 
                 <div class="tip">
@@ -812,171 +600,83 @@ function prikaziRezultate(utakmice) {
                 </div>
             `;
 
-            divGrupa.appendChild(
-                div
-            );
-        });
+            box.appendChild(div);
+        }
 
-
-        container.appendChild(
-            divGrupa
-        );
+        container.appendChild(box);
     }
 }
 
-
-/* --------------------------------------------------
-   GLAVNA FUNKCIJA
--------------------------------------------------- */
-
 async function analizirajSlike() {
 
-    const input =
-        document.getElementById(
-            "slike"
-        );
+    const input = document.getElementById("slike");
+    const status = document.getElementById("status");
+    const button = document.getElementById("analiziraj");
 
-    const status =
-        document.getElementById(
-            "status"
-        );
-
-    const button =
-        document.getElementById(
-            "analiziraj"
-        );
-
-
-    if (
-        !input.files ||
-        input.files.length === 0
-    ) {
-
-        alert(
-            "Prvo odaberi jednu ili više slika."
-        );
-
+    if (!input.files || input.files.length === 0) {
+        alert("Odaberi slike.");
         return;
     }
 
+    button.disabled = true;
+    status.textContent = "Pokrećem analizu...";
+    document.getElementById("rezultati").innerHTML = "";
 
-    button.disabled =
-        true;
-
-    document.getElementById(
-        "rezultati"
-    ).innerHTML = "";
-
-
-    let sveUtakmice = [];
-
+    let sve = [];
 
     try {
 
-        for (
-            let i = 0;
-            i < input.files.length;
-            i++
-        ) {
-
-            const file =
-                input.files[i];
+        for (let i = 0; i < input.files.length; i++) {
 
             status.textContent =
                 `Čitam sliku ${i + 1} od ${input.files.length}...`;
 
+            const rezultat = await Tesseract.recognize(
+                input.files[i],
+                "eng",
+                {
+                    logger: m => {
 
-            const rezultat =
-                await Tesseract.recognize(
+                        if (m.status === "recognizing text") {
 
-                    file,
+                            const p = Math.round(m.progress * 100);
 
-                    "eng",
-
-                    {
-
-                        logger: m => {
-
-                            if (
-                                m.status ===
-                                "recognizing text"
-                            ) {
-
-                                const posto =
-                                    Math.round(
-                                        m.progress * 100
-                                    );
-
-                                status.textContent =
-                                    `Slika ${i + 1}/${input.files.length} - ${posto}%`;
-                            }
+                            status.textContent =
+                                `Slika ${i + 1}/${input.files.length} - ${p}%`;
                         }
                     }
-                );
-
-
-            const tekst =
-                rezultat.data.text;
-
-
-            console.log(
-                "OCR TEKST SLIKE:",
-                i + 1,
-                tekst
+                }
             );
 
+            const tekst = rezultat.data.text;
 
-            const pronadjene =
-                obradiTekst(
-                    tekst
-                );
+            console.log("OCR:", tekst);
 
+            const pronadjene = obradiTekst(tekst);
 
-            sveUtakmice.push(
-                ...pronadjene
-            );
+            sve.push(...pronadjene);
         }
 
+        sve = ukloniDuplikate(sve);
+        sve = sortiraj(sve);
 
-        sveUtakmice =
-            ukloniDuplikate(
-                sveUtakmice
-            );
-
-
-        sveUtakmice =
-            sortirajUtakmice(
-                sveUtakmice
-            );
-
-
-        prikaziRezultate(
-            sveUtakmice
-        );
-
+        prikaziRezultate(sve);
 
         status.textContent =
-            `Gotovo. Pronađeno utakmica: ${sveUtakmice.length}`;
+            `Gotovo. Pronađeno utakmica: ${sve.length}`;
 
+    } catch (e) {
 
-    }
-    catch (greska) {
-
-        console.error(
-            greska
-        );
+        console.error(e);
 
         status.textContent =
-            "Dogodila se greška tijekom čitanja slike.";
+            "Greška tijekom analize.";
 
-        alert(
-            "Greška tijekom analize slike."
-        );
-    }
-    finally {
+        alert("Dogodila se greška.");
 
-        button.disabled =
-            false;
+    } finally {
+
+        button.disabled = false;
     }
 }
 
